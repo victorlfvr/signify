@@ -1,0 +1,22 @@
+# src/config/training.yaml
+
+# Nombre d'époques d'entraînement
+epochs: 20
+
+# Taille du batch (nombre d'images traitées par itération)
+batch_size: 64
+
+# Taux d'apprentissage
+lr: 0.001
+
+# Optimiseur (actuellement supporté : adam, sgd)
+optimizer: "adam"
+
+# Scheduler de learning rate (facultatif)
+scheduler: null
+
+# Appareil : "cuda" pour GPU, "cpu" sinon
+device: "cuda"
+
+# Taille d'image standard
+image_size: 96
