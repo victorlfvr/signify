@@ -23,13 +23,14 @@ def load_model(model_name: str, ckpt_path: Path, classes_json: Path, device: str
     return model, idx_to_class, device
 
 
-def get_transform(image_size: int = 96):
+def get_transform(image_size=96):
     """Transformations d'entrée pour l'inférence."""
     return transforms.Compose([
         transforms.Resize((image_size, image_size)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5]*3, std=[0.5]*3)
+        transforms.Normalize([0.5]*3, [0.5]*3)
     ])
+
 
 
 def predict(model, img, device, idx_to_class):
