@@ -27,7 +27,7 @@ def save_confusion_matrix(cm, class_names, out_path):
 
 
 def save_f1_barplot(report_dict, out_path):
-    classes = list(report_dict.keys())[:-3]   # ignore accuracy/macro/micro
+    classes = list(report_dict.keys())[:-3]  
     f1_scores = [report_dict[c]["f1-score"] for c in classes]
 
     plt.figure(figsize=(14, 5))
@@ -50,20 +50,17 @@ def main():
     ap.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
 
-    # --- Transfos val ---
     transform = transforms.Compose([
         transforms.Resize((96, 96)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5]*3, std=[0.5]*3)
     ])
 
-    # --- Dataset ---
     ds = datasets.ImageFolder(args.data / args.split, transform=transform)
     dl = torch.utils.data.DataLoader(ds, batch_size=64, shuffle=False)
 
     n_classes = len(ds.classes)
 
-    # --- Charger modèle ---
     model = get_model(args.model, n_classes).to(args.device)
     model.load_state_dict(torch.load(args.ckpt, map_location=args.device))
     model.eval()
@@ -71,27 +68,22 @@ def main():
     criterion = torch.nn.CrossEntropyLoss()
     val_loss, val_acc, preds, gts = evaluate(model, dl, criterion, args.device)
 
-    # --- Calculer métriques ---
     cm, report = compute_metrics(preds, gts, ds.classes)
 
-    print(f"\n✅ Évaluation terminée ({args.split})")
+    print(f"\nÉvaluation terminée ({args.split})")
     print(f"Accuracy : {val_acc:.2f}%  |  Loss : {val_loss:.4f}")
     print("\n--- Rapport détaillé ---")
     print(report)
 
-    # --- Dossier output ---
     out_dir = Path("runs") / f"eval_{args.model}_{args.split}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- Sauvegarde CSV + Excel ---
     cm_df = pd.DataFrame(cm, index=ds.classes, columns=ds.classes)
 
-    # Transformer le report sklearn -> dict
     from sklearn.metrics import classification_report
     report_dict = classification_report(gts, preds, target_names=ds.classes, output_dict=True)
     report_df = pd.DataFrame(report_dict).transpose()
 
-    # --- Sauvegarde CSV ---
     cm_df.to_csv(out_dir / "confusion_matrix.csv", index=True)
     report_df.to_csv(out_dir / "classification_report.csv", index=True)
 
@@ -103,17 +95,15 @@ def main():
 
 
 
-    # --- Sauvegarde images ---
     save_confusion_matrix(cm, ds.classes, out_dir / "confusion_matrix.png")
     save_f1_barplot(report_dict, out_dir / "f1_scores.png")
 
-    # Sauvegarde brute des métriques
     torch.save({"confusion_matrix": cm, "accuracy": val_acc}, out_dir / "metrics.pt")
     with open(out_dir / "report.txt", "w") as f:
         f.write(report)
 
-    print(f"\n📁 Résultats sauvegardés dans : {out_dir}")
-    print("📊 Fichiers générés :")
+    print(f"\nRésultats sauvegardés dans : {out_dir}")
+    print("Fichiers générés :")
     print("   - confusion_matrix.png")
     print("   - f1_scores.png")
     print("   - evaluation.xlsx")

@@ -1,5 +1,4 @@
 import numpy as np
-import torch
 
 def mixup(x1, y1, x2, y2, alpha=0.4):
     lam = np.random.beta(alpha, alpha)
@@ -27,17 +26,12 @@ def rand_bbox(size, lam):
 def cutmix(x1, y1, x2, y2, alpha=1.0):
     lam = np.random.beta(alpha, alpha)
     x1 = x1.clone()
-    batch, _, _, _ = x1.size()
+    batch = x1.size(0)
 
     for i in range(batch):
-        x2_img = x2[i]
-        y2_lab = y2[i]
-        x1_img = x1[i]
+        bbx1, bby1, bbx2, bby2 = rand_bbox(x1[i].size(), lam)
+        x1[i, :, bby1:bby2, bbx1:bbx2] = x2[i, :, bby1:bby2, bbx1:bbx2]
 
-        x1_, y1_, x2_, y2_ = rand_bbox(x1_img.size(), lam)
-        x1_img[:, y1_:y2_, x1_:x2_] = x2_img[:, y1_:y2_, x1_:x2_]
-
-        lam = 1 - ((x2_ - x1_) * (y2_ - y1_) / (x1_img.shape[1] * x1_img.shape[2]))
-
+    lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x1[i].shape[1] * x1[i].shape[2]))
     y = lam * y1 + (1 - lam) * y2
     return x1, y

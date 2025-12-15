@@ -1,15 +1,15 @@
-# -*- coding: utf-8 -*-
-# Usage :
-#   python -m src.train.train_model --data data/split --model CNN --epochs 15
-
 import argparse, json, yaml, torch, torch.nn as nn, torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 from pathlib import Path
 from datetime import datetime
 from tqdm import tqdm
+import torch.nn.functional as F
 
 from src.models.factory import get_model
+from src.preprocess.augment import mixup, cutmix
+from src.preprocess.histogram import HistogramEqualization
+
 
 
 def main():
@@ -27,76 +27,86 @@ def main():
     BATCH = args.batch or cfg["batch_size"]
     LR = args.lr or cfg["lr"]
     DEVICE = args.device
-    IMG = cfg["image_size"]
 
-    train_tf = transforms.Compose([
-        transforms.Resize((IMG, IMG)),
-        transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2),
-        transforms.RandomRotation(7),
-        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
+    train_transform = transforms.Compose([
+        HistogramEqualization(),              
+        transforms.Resize((96, 96)),
+        transforms.RandomRotation(25),
+        transforms.RandomAffine(
+            degrees=0,
+            translate=(0.10, 0.10),
+            scale=(0.85, 1.20)
+        ),
         transforms.RandomHorizontalFlip(),
-        transforms.GaussianBlur(3),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5], std=[0.5]),
+        transforms.Normalize([0.5]*3, [0.5]*3)
     ])
 
-    val_tf = transforms.Compose([
-        transforms.Resize((IMG, IMG)),
+    val_transform = transforms.Compose([
+        HistogramEqualization(),
+        transforms.Resize((96, 96)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5], std=[0.5]),
+        transforms.Normalize([0.5]*3, [0.5]*3)
     ])
 
-    train_ds = datasets.ImageFolder(args.data / "train", transform=train_tf)
-    val_ds = datasets.ImageFolder(args.data / "val", transform=val_tf)
+    train_ds = datasets.ImageFolder(args.data / "train", transform=train_transform)
+    val_ds   = datasets.ImageFolder(args.data / "val",   transform=val_transform)
 
     train_dl = DataLoader(train_ds, batch_size=BATCH, shuffle=True, num_workers=2)
-    val_dl = DataLoader(val_ds, batch_size=BATCH, shuffle=False)
+    val_dl   = DataLoader(val_ds,   batch_size=BATCH, shuffle=False)
 
     n_classes = len(train_ds.classes)
-    Path("checkpoints").mkdir(exist_ok=True)
-    Path("runs").mkdir(exist_ok=True)
 
+    Path("checkpoints").mkdir(exist_ok=True)
     with open("checkpoints/class_to_idx.json", "w") as f:
         json.dump(train_ds.class_to_idx, f, indent=2)
 
     model = get_model(args.model, n_classes).to(DEVICE)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
+
+    USE_MIXUP = True
+    USE_CUTMIX = False  
+
+    criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=LR)
 
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
-
-    run_name = f"{args.model}_lr{LR}_b{BATCH}_ep{EPOCHS}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    run_dir = Path("runs") / run_name
+    run_dir = Path("runs") / f"{args.model}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     run_dir.mkdir(parents=True, exist_ok=True)
-
     ckpt_path = Path("checkpoints") / f"{args.model}_best.pt"
 
-    print(f"[INFO] Entraînement du modèle {args.model} ({n_classes} classes)")
-    print(f"[INFO] Logs → {run_dir}")
-    print(f"[INFO] Checkpoints → {ckpt_path}")
-
     best_val_acc = 0.0
+
     for epoch in range(EPOCHS):
         model.train()
-        train_correct, train_total, train_loss_sum = 0, 0, 0
+        train_correct, total_loss, total = 0, 0, 0
 
         for X, y in tqdm(train_dl, desc=f"Epoch {epoch+1}/{EPOCHS} [train]"):
             X, y = X.to(DEVICE), y.to(DEVICE)
+            y_onehot = F.one_hot(y, num_classes=n_classes).float()
+
+            if USE_MIXUP:
+                idx = torch.randperm(X.size(0))
+                X, y_onehot = mixup(X, y_onehot, X[idx], y_onehot[idx])
+
+            if USE_CUTMIX:
+                idx = torch.randperm(X.size(0))
+                X, y_onehot = cutmix(X, y_onehot, X[idx], y_onehot[idx])
+
             optimizer.zero_grad()
             out = model(X)
-            loss = criterion(out, y)
+
+            loss = criterion(out, y_onehot)
             loss.backward()
             optimizer.step()
 
-            train_loss_sum += loss.item()
+            total_loss += loss.item()
+            total += y.size(0)
             train_correct += (out.argmax(1) == y).sum().item()
-            train_total += y.size(0)
 
-        train_acc = train_correct / train_total * 100
-        train_loss = train_loss_sum / len(train_dl)
+        train_acc = 100 * train_correct / total
 
         model.eval()
         val_correct, val_total = 0, 0
+
         with torch.no_grad():
             for X, y in tqdm(val_dl, desc=f"Epoch {epoch+1}/{EPOCHS} [val]"):
                 X, y = X.to(DEVICE), y.to(DEVICE)
@@ -104,22 +114,15 @@ def main():
                 val_correct += (out.argmax(1) == y).sum().item()
                 val_total += y.size(0)
 
-        val_acc = val_correct / val_total * 100
-
-        print(f"Epoch {epoch+1}/{EPOCHS} | loss={train_loss:.4f} | train_acc={train_acc:.2f}% | val_acc={val_acc:.2f}%")
-
-        scheduler.step()
+        val_acc = 100 * val_correct / val_total
+        print(f"Epoch {epoch+1}: train_acc={train_acc:.2f}% | val_acc={val_acc:.2f}%")
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             torch.save(model.state_dict(), ckpt_path)
-            print(f"[INFO] Nouveau meilleur modèle sauvegardé (val_acc={best_val_acc:.2f}%)")
+            print(f"[INFO] meilleur modèle sauvegardé ({val_acc:.2f}%)")
 
-        with open(run_dir / "log.txt", "a") as f:
-            f.write(f"{epoch+1},{train_loss:.4f},{train_acc:.2f},{val_acc:.2f}\n")
-
-    print(f"[OK] Entraînement terminé. Meilleure val_acc={best_val_acc:.2f}%")
-    print(f"→ Checkpoint final : {ckpt_path}")
+    print(f"[OK] Meilleure val_acc = {best_val_acc:.2f}%")
 
 
 if __name__ == "__main__":

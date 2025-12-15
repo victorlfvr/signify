@@ -9,12 +9,9 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import cv2
 
-
-
 EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 def list_classes(root: Path):
-    # e.g., root/train/<class>/*
     classes = sorted([d.name for d in root.iterdir() if d.is_dir()])
     return classes
 
@@ -52,16 +49,15 @@ class SimpleImageDataset(Dataset):
         img = Image.open(p).convert("RGB")
         if self.is_train:
             img = self._augment(img)
-        # resize 200->96 (pas de crop)
+        
         img = img.resize((96, 96), resample=Image.BILINEAR)
-        # to tensor [3,96,96] in [0,1]
+        
         arr = np.asarray(img, dtype=np.float32) / 255.0
-        arr = np.transpose(arr, (2,0,1))  # HWC->CHW
+        arr = np.transpose(arr, (2,0,1))  
         x = torch.from_numpy(arr)
         return x, y
 
 def make_grid_bgr(batch_imgs: torch.Tensor, batch_labels: torch.Tensor, classes: list[str], ncols=8):
-    # batch_imgs: [B,3,96,96] in [0,1]
     B = batch_imgs.shape[0]
     nrows = int(np.ceil(B / ncols))
     cell_h, cell_w = 96, 96

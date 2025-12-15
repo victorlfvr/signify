@@ -6,16 +6,13 @@ from src.models.factory import get_model
 
 
 def load_model(model_name: str, ckpt_path: Path, classes_json: Path, device: str = None):
-    """Charge le modèle et la correspondance classes ↔ indices."""
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Charger classes
     with open(classes_json, "r") as f:
         class_to_idx = json.load(f)
     idx_to_class = {v: k for k, v in class_to_idx.items()}
     n_classes = len(idx_to_class)
 
-    # Charger modèle
     model = get_model(model_name, n_classes).to(device)
     model.load_state_dict(torch.load(ckpt_path, map_location=device))
     model.eval()

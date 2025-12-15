@@ -4,7 +4,9 @@
 import argparse, random, shutil
 from pathlib import Path
 
-WHITELIST = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ") + ["del", "space", "nothing"]
+# WHITELIST = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ") + ["del", "space", "nothing"]
+WHITELIST = list("abcdefghijklmnopqrstuvwxyz")
+
 EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 def pick_files(folder: Path, cap: int, seed: int):
@@ -18,7 +20,6 @@ def split_three(n: int, p_train=0.7, p_val=0.15):
     n_train = int(round(n * p_train))
     n_val = int(round(n * p_val))
     n_test = n - n_train - n_val
-    # Ajustement si arrondis posent problème
     while n_test < 0:
         n_val -= 1; n_test += 1
     return n_train, n_val, n_test
@@ -37,31 +38,30 @@ def main():
     src_root: Path = args.src
     out_root: Path = args.out
 
-    # Crée arborescence
+    
     for split in ("train", "val", "test"):
         for cls in WHITELIST:
             (out_root / split / cls).mkdir(parents=True, exist_ok=True)
 
-    # Boucle classes
+    
     for cls in WHITELIST:
         src_dir = src_root / cls
         if not src_dir.exists():
             print(f"[WARN] Classe absente: {cls} ({src_dir})")
             continue
 
-        # Tirage aléatoire reproductible
+        
         files = pick_files(src_dir, args.cap, seed=args.seed)
         n = len(files)
         n_tr, n_va, n_te = split_three(n, p_train=args.train, p_val=args.val)
 
-        # Répartition
-        rnd = random.Random(args.seed)  # reshuffle pour distribution
+        
+        rnd = random.Random(args.seed)  
         rnd.shuffle(files)
         train_files = files[:n_tr]
         val_files = files[n_tr:n_tr+n_va]
         test_files = files[n_tr+n_va:]
 
-        # Copie
         for f in train_files:
             shutil.copy2(f, out_root / "train" / cls / f.name)
         for f in val_files:

@@ -24,12 +24,6 @@ ENV/
 *.env
 *.venv
 
-# --- Packages / Dependencies ---
-*.egg
-*.egg-info/
-dist/
-build/
-.eggs/
 
 # --- Logs / Debug ---
 *.log
