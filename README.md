@@ -1,29 +1,45 @@
-# Signify - IA pour la reconnaissance de la Langue des Signes
+# Signify - Reconnaissance de la Langue des Signes en Temps Réel
 
-Ce projet vise à développer une application capable de reconnaître des gestes de la Langue des Signes en temps réel.
+## Objectif
+Développer une application capable de reconnaître des gestes de l'alphabet de la Langue des Signes (ASL) en temps réel via webcam.
 
 
 ## Installation
-Prérequis : **Python 3.11.9** installé  
-
-## Cloner le dépôt et installer les dépendances
-```
-git clone https://github.com/<ton-user>/signify.git
+```bash
+# Cloner le projet
+git clone https://github.com/Victoooooooor/signify.git
 cd signify
+
+# Créer l'environnement virtuel
 python -m venv venv
-venv\Scripts\activate
+venv\Scripts\activate  # Windows
+source venv/bin/activate  # Linux/Mac
+
+# Installer les dépendances
 pip install -r requirements.txt
 ```
 
-## Récupérer le dataset
-1. Se rendre sur https://www.kaggle.com/datasets/grassknoted/asl-alphabet
-2. Télécharger le zip
-3. Créer le dossier data dans le dossier signify
-4. Extraire le dataset dans signify/data 
+## Dataset 1
+- **Source** : ASL Alphabet Dataset 
+- **Lien** : https://www.kaggle.com/datasets/grassknoted/asl-alphabet
+- **Classes** : A-Z supprimer : del + space + nothing 
+- **Images** : 3000 par classe
 
-# Prévisualisation caméra
-Actuellement seulement la détection de la main et des 21 points clés
-```
-python -m src.hand_preview
-```
+## Dataset 2
+- **Source** : American Sign Language Dataset
+- **Lien** : https://www.kaggle.com/datasets/ayuraj/asl-dataset
+- **Classes** : A-Z supprimer : 1-9 
+- **Images** : 70 par classe
 
+
+## 🎮 Utilisation
+```bash
+# Entraînement
+python -m src.train.train_model --data data/split --epochs 30
+
+# Évaluation
+python -m src.train.eval_model --ckpt checkpoints/best_model.pt
+
+# Inférence temps réel
+python -m src.inference.cam_infer --ckpt checkpoints/best_model.pt
+```
