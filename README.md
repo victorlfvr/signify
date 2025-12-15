@@ -32,7 +32,7 @@ pip install -r requirements.txt
 - **Images** : 70 par classe
 
 
-## 🎮 Utilisation
+## Utilisation
 ```bash
 # Entraînement
 python -m src.train.train_model --data data/split --epochs 30
